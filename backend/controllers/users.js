@@ -2,23 +2,54 @@ const User = require('../models/users');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-exports.signup = (req, res, next) => {
+exports.signup = (req, res) => {
   bcrypt.hash(req.body.password, 10)
     .then(hash => {
       const user = new User({
         email: req.body.email,
         password: hash,
+        nom: req.body.nom,
+        prenom: req.body.prenom,
         telephone: req.body.telephone
       });
       user.save()
         .then(() => res.status(201).json({ message: 'Utilisateur créé !' }))
-        .catch(error => res.status(400).json({ error }));
+        .catch(() => res.status(400).json({ message: 'Cet email est déjà utilisé.' }));
     })
-    .catch(error => res.status(500).json({ error }));
+    .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
 };
 
-exports.login = (req, res, next) => {
-   User.findOne({ email: req.body.email })
+exports.updateMe = async (req, res) => {
+  try {
+    const { nom, prenom, telephone, currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.auth.userId);
+    if (!user) return res.status(404).json({ message: 'Utilisateur introuvable.' });
+
+    if (nom !== undefined) user.nom = nom;
+    if (prenom !== undefined) user.prenom = prenom;
+    if (telephone !== undefined) user.telephone = telephone;
+
+    // Changement de mot de passe optionnel
+    if (newPassword) {
+      const valid = await bcrypt.compare(currentPassword || '', user.password);
+      if (!valid) return res.status(401).json({ message: 'Mot de passe actuel incorrect.' });
+      user.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    await user.save();
+    res.status(200).json({
+      message: 'Profil mis à jour.',
+      nom: user.nom,
+      prenom: user.prenom,
+      telephone: user.telephone,
+    });
+  } catch {
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+exports.login = (req, res) => {
+  User.findOne({ email: req.body.email })
        .then(user => {
            if (!user) {
                return res.status(401).json({ message: 'Paire login/mot de passe incorrecte'});
@@ -30,14 +61,17 @@ exports.login = (req, res, next) => {
                    }
                    res.status(200).json({
                        userId: user._id,
+                       role: user.role,
+                       nom: user.nom,
+                       prenom: user.prenom,
                        token: jwt.sign(
-                        { userId: user._id },
+                        { userId: user._id, role: user.role },
                         process.env.JWT_SECRET,
                         { expiresIn: '24h' }
                         )
                     });
                 })
-               .catch(error => res.status(500).json({ error }));
+               .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
         })
-       .catch(error => res.status(500).json({ error }));
+       .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
 };

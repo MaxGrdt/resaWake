@@ -1,10 +1,12 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-const stuffRoutes = require('./routes/stuff');
 const userRoutes = require('./routes/users');
+const adminRoutes = require('./routes/admin');
+const reservationRoutes = require('./routes/reservations');
+const errorHandler = require('./middleware/errorHandler');
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('Connexion à MongoDB réussie !'))
@@ -19,9 +21,13 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(bodyParser.json());
+app.use(express.json());
 
-app.use('/api/stuff', stuffRoutes);
 app.use('/api/auth', userRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api', reservationRoutes);
+
+// Gestionnaire d'erreurs centralisé (doit être en dernier)
+app.use(errorHandler);
 
 module.exports = app;
