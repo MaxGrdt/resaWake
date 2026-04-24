@@ -6,7 +6,7 @@ require('dotenv').config();
 const stuffRoutes = require('./routes/stuff');
 const userRoutes = require('./routes/users');
 
-mongoose.connect('mongodb+srv://MaxGrdt:hhdkKnOWC9jcMAxu@resawake.lqcvm4k.mongodb.net/?appName=resaWake')
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('Connexion à MongoDB réussie !'))
   .catch((err) => console.log('Connexion à MongoDB échouée !', err.message));
 
