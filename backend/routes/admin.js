@@ -22,6 +22,35 @@ router.post('/users',
   userCtrl.signup
 );
 
+// Liste des adhérents
+router.get('/users', adminCtrl.getUsers);
+
+// Suppression d'un adhérent
+router.delete('/users/:id', adminCtrl.deleteUser);
+
+// Modification d'un adhérent
+router.put('/users/:id',
+  [
+    body('email').optional().isEmail().withMessage('Email invalide.'),
+    body('nom').optional().notEmpty().withMessage('Le nom ne peut pas être vide.'),
+    body('prenom').optional().notEmpty().withMessage('Le prénom ne peut pas être vide.'),
+  ],
+  validate,
+  adminCtrl.updateUser
+);
+
+// Envoi des identifiants par email
+router.post('/users/send-credentials',
+  [
+    body('email').isEmail().withMessage('Email invalide.'),
+    body('password').notEmpty().withMessage('Le mot de passe est requis.'),
+    body('nom').notEmpty().withMessage('Le nom est requis.'),
+    body('prenom').notEmpty().withMessage('Le prénom est requis.')
+  ],
+  validate,
+  adminCtrl.sendCredentials
+);
+
 // Config d'ouverture
 router.get('/config', adminCtrl.getConfig);
 router.put('/config',
@@ -59,5 +88,13 @@ router.put('/reservations/:id',
   adminCtrl.updateReservation
 );
 router.delete('/reservations/:id', adminCtrl.deleteReservation);
+
+// Statistiques
+router.get('/stats', adminCtrl.getStats);
+router.get('/stats/custom', adminCtrl.getCustomStats);
+router.get('/stats/timeseries', adminCtrl.getTimeseries);
+
+// Journal d'audit
+router.get('/logs', adminCtrl.getLogs);
 
 module.exports = router;

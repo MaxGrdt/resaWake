@@ -5,7 +5,7 @@ import Login from './pages/Login';
 import UserDashboard from './pages/UserDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import MonProfil from './pages/MonProfil';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './hooks/useAuth';
 
 function Home() {
   // Redirige vers la bonne page selon le rôle

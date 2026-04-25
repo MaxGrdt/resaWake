@@ -1,5 +1,6 @@
 const OpeningConfig = require('../models/openingConfig');
 const Reservation = require('../models/reservation');
+const logAction = require('../services/auditLog');
 
 // Génère tous les horaires d'une journée à partir de la config (ex: ["09:00","09:20",...])
 function genererHoraires(heureOuverture, heureFermeture, dureeMinutes) {
@@ -50,10 +51,13 @@ exports.getSlots = async (req, res) => {
       date: { $gte: jour, $lt: lendemain }
     });
 
-    // Construire la grille des créneaux pour les 2 lignes
+    // Construire la grille des créneaux pour les lignes ouvertes
+    const lignes = (config.lignesOuvertes && config.lignesOuvertes.length > 0)
+      ? [...config.lignesOuvertes].sort()
+      : [1, 2];
     const creneaux = [];
     for (const heure of horaires) {
-      for (const ligne of [1, 2]) {
+      for (const ligne of lignes) {
         const resa = reservationsDuJour.find(r => r.heure === heure && r.ligne === ligne);
         creneaux.push({
           heure,
@@ -64,7 +68,7 @@ exports.getSlots = async (req, res) => {
       }
     }
 
-    res.status(200).json({ date, creneaux });
+    res.status(200).json({ date, lignes, creneaux });
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur.' });
   }
@@ -95,6 +99,12 @@ exports.createReservation = async (req, res) => {
       return res.status(400).json({ message: `Créneau invalide. Horaires disponibles : ${horairesValides.join(', ')}.` });
     }
 
+    // Vérifier que la ligne est ouverte
+    const lignesOuvertes = (config.lignesOuvertes && config.lignesOuvertes.length > 0) ? config.lignesOuvertes : [1, 2];
+    if (!lignesOuvertes.includes(ligne)) {
+      return res.status(400).json({ message: `La ligne ${ligne} n'est pas ouverte.` });
+    }
+
     const reservation = new Reservation({
       userId: req.auth.userId,
       date: jour,
@@ -103,6 +113,7 @@ exports.createReservation = async (req, res) => {
       type: 'reservation'
     });
     await reservation.save();
+    logAction(req.auth.userId, 'user', 'CREATION_RESERVATION', { date, heure, ligne });
     res.status(201).json(reservation);
   } catch (error) {
     if (error.code === 11000) {
@@ -121,6 +132,43 @@ exports.getMyReservations = async (req, res) => {
       type: 'reservation'
     }).sort({ date: 1, heure: 1 });
     res.status(200).json(reservations);
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// DELETE /api/reservations/:id
+// L'utilisateur peut supprimer sa propre réservation jusqu'à 24h avant le début de la session.
+exports.deleteMyReservation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const resa = await Reservation.findOne({
+      _id: id,
+      userId: req.auth.userId,
+      type: 'reservation',
+    });
+    if (!resa) {
+      return res.status(404).json({ message: 'Réservation introuvable.' });
+    }
+
+    // Construire la date/heure de début de la session
+    const [hh, mm] = (resa.heure || '00:00').split(':').map(Number);
+    const start = new Date(resa.date);
+    start.setHours(hh, mm, 0, 0);
+
+    const now = new Date();
+    const diffMs = start.getTime() - now.getTime();
+    const limitMs = 24 * 60 * 60 * 1000;
+
+    if (diffMs < limitMs) {
+      return res.status(403).json({
+        message: 'Annulation impossible à moins de 24h. Appelez le parc pour annuler votre réservation.',
+      });
+    }
+
+    await Reservation.deleteOne({ _id: id });
+    logAction(req.auth.userId, 'user', 'ANNULATION_RESERVATION', { date: resa.date, heure: resa.heure, ligne: resa.ligne });
+    res.status(200).json({ message: 'Réservation annulée.' });
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur.' });
   }

@@ -1,6 +1,7 @@
 const User = require('../models/users');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const logAction = require('../services/auditLog');
 
 exports.signup = (req, res) => {
   bcrypt.hash(req.body.password, 10)
@@ -10,13 +11,32 @@ exports.signup = (req, res) => {
         password: hash,
         nom: req.body.nom,
         prenom: req.body.prenom,
-        telephone: req.body.telephone
+        telephone: req.body.telephone,
+        forfaitSaison: !!req.body.forfaitSaison
       });
       user.save()
-        .then(() => res.status(201).json({ message: 'Utilisateur créé !' }))
+        .then(() => {
+          if (req.auth) logAction(req.auth.userId, 'admin', 'CREATION_ADHERENT', { email: req.body.email, nom: req.body.nom, prenom: req.body.prenom });
+          res.status(201).json({ message: 'Utilisateur créé !' });
+        })
         .catch(() => res.status(400).json({ message: 'Cet email est déjà utilisé.' }));
     })
     .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
+};
+
+exports.getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.auth.userId).select('-password');
+    if (!user) return res.status(404).json({ message: 'Utilisateur introuvable.' });
+    res.status(200).json({
+      nom: user.nom,
+      prenom: user.prenom,
+      telephone: user.telephone || '',
+      email: user.email,
+    });
+  } catch {
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
 };
 
 exports.updateMe = async (req, res) => {
@@ -37,6 +57,7 @@ exports.updateMe = async (req, res) => {
     }
 
     await user.save();
+    logAction(user._id, 'user', 'MODIFICATION_PROFIL', { nom: user.nom, prenom: user.prenom, telephone: user.telephone, passwordChanged: !!newPassword });
     res.status(200).json({
       message: 'Profil mis à jour.',
       nom: user.nom,
@@ -70,6 +91,7 @@ exports.login = (req, res) => {
                         { expiresIn: '24h' }
                         )
                     });
+                    logAction(user._id, user.role, 'CONNEXION', { email: user.email });
                 })
                .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
         })

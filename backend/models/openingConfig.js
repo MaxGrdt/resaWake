@@ -7,7 +7,9 @@ const openingConfigSchema = mongoose.Schema({
   heureOuverture: { type: String, required: true }, // ex: "09:00"
   heureFermeture: { type: String, required: true }, // ex: "19:00"
   dureeCreneaux: { type: Number, default: 20 },      // en minutes
-  joursExceptionnellementFermes: [{ type: Date }]     // ex: ["2026-07-14"]
+  joursExceptionnellementFermes: [{ type: Date }],   // ex: ["2026-07-14"]
+  lignesOuvertes: { type: [Number], default: [1, 2] }, // lignes actives (1 et/ou 2)
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('OpeningConfig', openingConfigSchema);

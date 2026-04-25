@@ -20,8 +20,8 @@ export default function AdminConfig() {
     joursSemaine: [],
     heureOuverture: '09:00',
     heureFermeture: '19:00',
-    dureeCreneaux: 20,
     joursExceptionnellementFermes: [],
+    lignesOuvertes: [1, 2],
   });
   const [newClosedDate, setNewClosedDate] = useState('');
   const [error, setError] = useState(null);
@@ -36,8 +36,8 @@ export default function AdminConfig() {
           joursSemaine: data.joursSemaine || [],
           heureOuverture: data.heureOuverture || '09:00',
           heureFermeture: data.heureFermeture || '19:00',
-          dureeCreneaux: 20,
           joursExceptionnellementFermes: (data.joursExceptionnellementFermes || []).map(dateToISO),
+          lignesOuvertes: data.lignesOuvertes && data.lignesOuvertes.length > 0 ? data.lignesOuvertes : [1, 2],
         });
       } catch (err) {
         // 404 = pas encore de config, on garde les valeurs par défaut
@@ -47,6 +47,17 @@ export default function AdminConfig() {
       }
     })();
   }, []);
+
+  function toggleLigne(v) {
+    setConfig((c) => {
+      const next = c.lignesOuvertes.includes(v)
+        ? c.lignesOuvertes.filter((l) => l !== v)
+        : [...c.lignesOuvertes, v].sort();
+      // Au moins une ligne doit rester ouverte
+      if (next.length === 0) return c;
+      return { ...c, lignesOuvertes: next };
+    });
+  }
 
   function toggleJour(v) {
     setConfig((c) => ({
@@ -80,10 +91,7 @@ export default function AdminConfig() {
     setError(null);
     setInfo(null);
     try {
-      await api.saveConfig({
-        ...config,
-        dureeCreneaux: Number(config.dureeCreneaux),
-      });
+      await api.saveConfig(config);
       setInfo('Configuration enregistrée !');
     } catch (err) {
       setError(err.message);
@@ -95,6 +103,22 @@ export default function AdminConfig() {
   return (
     <form className="card form" onSubmit={handleSave}>
       <h2>Configuration du parc</h2>
+
+      <fieldset>
+        <legend>Lignes ouvertes</legend>
+        <div className="days">
+          {[1, 2].map((l) => (
+            <label key={l} className="check">
+              <input
+                type="checkbox"
+                checked={config.lignesOuvertes.includes(l)}
+                onChange={() => toggleLigne(l)}
+              />
+              Ligne {l}
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <fieldset>
         <legend>Jours d'ouverture (semaine type)</legend>

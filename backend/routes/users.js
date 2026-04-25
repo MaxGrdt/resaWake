@@ -14,6 +14,8 @@ router.post('/login',
   userCtrl.login
 );
 
+router.get('/me', auth, userCtrl.getMe);
+
 router.put('/me',
   auth,
   [

@@ -16,6 +16,8 @@ router.get('/slots',
 
 router.get('/reservations/me', resaCtrl.getMyReservations);
 
+router.delete('/reservations/:id', resaCtrl.deleteMyReservation);
+
 router.post('/reservations',
   [
     body('date').isISO8601().withMessage('Date invalide (format attendu : YYYY-MM-DD).'),

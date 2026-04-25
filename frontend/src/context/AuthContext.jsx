@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import * as api from '../services/api';
 
-const AuthContext = createContext(null);
+// eslint-disable-next-line react-refresh/only-export-components -- AuthContext doit être co-localisé avec AuthProvider
+export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   // Hydrate l'état depuis localStorage au montage initial
@@ -47,10 +48,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth doit être utilisé dans AuthProvider');
-  return ctx;
 }

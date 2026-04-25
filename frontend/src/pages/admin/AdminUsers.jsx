@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import * as api from '../../services/api';
 
-const EMPTY = { email: '', password: '', nom: '', prenom: '', telephone: '' };
+const EMPTY = { email: '', password: '', nom: '', prenom: '', telephone: '', forfaitSaison: false };
 
 const CHARSET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&';
 
@@ -14,9 +14,12 @@ function generatePassword(length = 12) {
 export default function AdminUsers() {
   const [form, setForm] = useState(EMPTY);
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef(null);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -31,7 +34,8 @@ export default function AdminUsers() {
   function handleCopy() {
     navigator.clipboard.writeText(form.password).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
     });
   }
 
@@ -42,7 +46,18 @@ export default function AdminUsers() {
     setSubmitting(true);
     try {
       await api.adminCreateUser(form);
-      setInfo(`Adhérent ${form.prenom} ${form.nom} créé.`);
+      // Envoi des identifiants par email (non bloquant si échec)
+      try {
+        await api.adminSendCredentials({
+          email: form.email,
+          prenom: form.prenom,
+          nom: form.nom,
+          password: form.password,
+        });
+        setInfo(`Adhérent ${form.prenom} ${form.nom} créé — identifiants envoyés à ${form.email}.`);
+      } catch {
+        setInfo(`Adhérent ${form.prenom} ${form.nom} créé (l'envoi de l'email a échoué).`);
+      }
       setForm(EMPTY);
     } catch (err) {
       setError(err.message);
@@ -76,6 +91,30 @@ export default function AdminUsers() {
         <input value={form.telephone} onChange={(e) => update('telephone', e.target.value)} />
       </label>
 
+      <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem', margin: 0 }}>
+        <legend style={{ padding: '0 0.5rem', fontSize: '0.9rem' }}>Forfait saison</legend>
+        <div className="row" style={{ gap: '1.5rem' }}>
+          <label className="row" style={{ gap: '0.4rem', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="forfaitSaison"
+              checked={form.forfaitSaison === true}
+              onChange={() => update('forfaitSaison', true)}
+            />
+            Oui
+          </label>
+          <label className="row" style={{ gap: '0.4rem', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="forfaitSaison"
+              checked={form.forfaitSaison === false}
+              onChange={() => update('forfaitSaison', false)}
+            />
+            Non
+          </label>
+        </div>
+      </fieldset>
+
       <label>
         Mot de passe initial
         <div className="row" style={{ gap: '0.5rem' }}>
@@ -90,11 +129,7 @@ export default function AdminUsers() {
           <button type="button" className="btn btn-sm" onClick={handleGenerate}>
             Générer
           </button>
-          {form.password && (
-            <button type="button" className="btn btn-sm" onClick={handleCopy}>
-              {copied ? '✓ Copié' : 'Copier'}
-            </button>
-          )}
+
         </div>
       </label>
 

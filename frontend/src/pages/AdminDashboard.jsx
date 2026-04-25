@@ -2,11 +2,15 @@ import { useState } from 'react';
 import AdminConfig from './admin/AdminConfig';
 import AdminPlanning from './admin/AdminPlanning';
 import AdminUsers from './admin/AdminUsers';
+import AdminUsersList from './admin/AdminUsersList';
+import AdminStats from './admin/AdminStats';
 
 const TABS = [
   { id: 'planning', label: 'Planning du jour' },
   { id: 'config', label: 'Configuration' },
   { id: 'users', label: 'Adhérents' },
+  { id: 'users-list', label: 'Liste adhérents' },
+  { id: 'stats', label: 'Statistiques' },
 ];
 
 export default function AdminDashboard() {
@@ -31,6 +35,8 @@ export default function AdminDashboard() {
       {tab === 'planning' && <AdminPlanning />}
       {tab === 'config' && <AdminConfig />}
       {tab === 'users' && <AdminUsers />}
+      {tab === 'users-list' && <AdminUsersList />}
+      {tab === 'stats' && <AdminStats />}
     </div>
   );
 }

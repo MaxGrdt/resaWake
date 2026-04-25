@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import * as api from '../services/api';
 
 function todayISO() {
@@ -20,6 +20,7 @@ export default function UserDashboard() {
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
+  const scrollTimerRef = useRef(null);
 
   const loadSlots = useCallback(async () => {
     setError(null);
@@ -44,17 +45,59 @@ export default function UserDashboard() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadSlots(); }, [loadSlots]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadMyResas(); }, [loadMyResas]);
 
   // Scroll automatique si on arrive depuis la Navbar via navigate(state)
   useEffect(() => {
     if (location.state?.scrollTo) {
-      setTimeout(() => {
+      clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
         document.getElementById(location.state.scrollTo)?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
+    return () => clearTimeout(scrollTimerRef.current);
   }, [location.state]);
+
+  const [pending, setPending] = useState(null); // { heure, ligne }
+  const [cancelTarget, setCancelTarget] = useState(null); // resa à annuler
+  const [tooLateMessage, setTooLateMessage] = useState(null); // string
+
+  function startMs(resa) {
+    const [hh, mm] = (resa.heure || '00:00').split(':').map(Number);
+    const d = new Date(resa.date);
+    d.setHours(hh, mm, 0, 0);
+    return d.getTime();
+  }
+
+  function canCancel(resa) {
+    return startMs(resa) - Date.now() >= 24 * 60 * 60 * 1000;
+  }
+
+  function handleCancelClick(resa) {
+    if (canCancel(resa)) {
+      setCancelTarget(resa);
+    } else {
+      setTooLateMessage('Annulation impossible à moins de 24h. Appelez le parc pour annuler votre réservation.');
+    }
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    const id = cancelTarget._id;
+    setCancelTarget(null);
+    setError(null);
+    setInfo(null);
+    try {
+      await api.deleteMyReservation(id);
+      setInfo('Réservation annulée.');
+      await Promise.all([loadSlots(), loadMyResas()]);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function reserver(heure, ligne) {
     setError(null);
@@ -68,14 +111,31 @@ export default function UserDashboard() {
     }
   }
 
+  function handleReserverClick(heure, ligne) {
+    setPending({ heure, ligne });
+  }
+
+  async function confirmReservation() {
+    if (!pending) return;
+    const { heure, ligne } = pending;
+    setPending(null);
+    await reserver(heure, ligne);
+  }
+
   // Index des réservations du user pour la date sélectionnée (heure-ligne)
+  // Comparaison en heure locale pour éviter décalage de fuseau horaire
   const myResaKeys = new Set(
     myResas
-      .filter(r => new Date(r.date).toISOString().slice(0, 10) === date)
+      .filter(r => {
+        const d = new Date(r.date);
+        const localISO = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        return localISO === date;
+      })
       .map(r => `${r.heure}-${r.ligne}`)
   );
 
   // Regroupe les créneaux par heure pour affichage en lignes
+  const lignes = slotsData?.lignes || [1, 2];
   const grouped = {};
   if (slotsData?.creneaux) {
     for (const c of slotsData.creneaux) {
@@ -88,6 +148,70 @@ export default function UserDashboard() {
   return (
     <div className="page">
       <h1>Réserver un créneau</h1>
+
+      {/* Modale de confirmation d'annulation */}
+      {cancelTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: '2rem', maxWidth: 380, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '1.05rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              Annuler votre réservation du{' '}
+              <strong>{new Date(cancelTarget.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>
+              {' à '}<strong>{cancelTarget.heure}</strong> (ligne {cancelTarget.ligne})&nbsp;?
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={confirmCancel}>Oui, annuler</button>
+              <button className="btn" onClick={() => setCancelTarget(null)}>Non</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale d'information — trop tard pour annuler */}
+      {tooLateMessage && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: '2rem', maxWidth: 380, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '1.05rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              {tooLateMessage}
+            </p>
+            <button className="btn btn-primary" onClick={() => setTooLateMessage(null)}>OK</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de confirmation */}
+      {pending && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: '2rem', maxWidth: 360, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '1.05rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              Êtes-vous sûr de vouloir réserver le créneau du{' '}
+              <strong>{new Date(date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>
+              {' '}à <strong>{pending.heure}</strong> (ligne {pending.ligne})&nbsp;?
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={confirmReservation}>Oui</button>
+              <button className="btn" onClick={() => setPending(null)}>Non</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <label className="row">
@@ -114,22 +238,21 @@ export default function UserDashboard() {
             <thead>
               <tr>
                 <th>Heure</th>
-                <th>Ligne 1</th>
-                <th>Ligne 2</th>
+                {lignes.map((l) => <th key={l}>Ligne {l}</th>)}
               </tr>
             </thead>
             <tbody>
               {heures.map((h) => (
                 <tr key={h}>
                   <td className="hour">{h}</td>
-                  {[1, 2].map((ligne) => {
+                  {lignes.map((ligne) => {
                     const slot = grouped[h][ligne];
                     return (
                       <td key={ligne}>
                         {slot.statut === 'disponible' ? (
                           <button
                             className="btn btn-primary btn-sm"
-                            onClick={() => reserver(h, ligne)}
+                            onClick={() => handleReserverClick(h, ligne)}
                           >
                             Réserver
                           </button>
@@ -157,9 +280,17 @@ export default function UserDashboard() {
         ) : (
           <ul className="resa-list">
             {myResas.map((r) => (
-              <li key={r._id}>
-                <strong>{new Date(r.date).toLocaleDateString('fr-FR')}</strong>
-                {' '}— {r.heure} — Ligne {r.ligne}
+              <li key={r._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                <span>
+                  <strong>{new Date(r.date).toLocaleDateString('fr-FR')}</strong>
+                  {' '}— {r.heure} — Ligne {r.ligne}
+                </span>
+                <button
+                  className="btn btn-sm btn-danger"
+                  onClick={() => handleCancelClick(r)}
+                >
+                  Annuler
+                </button>
               </li>
             ))}
           </ul>
