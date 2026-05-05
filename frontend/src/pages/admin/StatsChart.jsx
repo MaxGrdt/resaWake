@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { adminGetTimeseries } from '../../services/api';
+import { currentISOWeek } from '../../utils/date';
 
 const GRANULARITIES = [
   { key: 'day', label: 'Jour' },
@@ -11,7 +12,6 @@ const GRANULARITIES = [
 // Helpers de conversion picker → ISO date
 function pad(n) { return String(n).padStart(2, '0'); }
 
-function isoFromDay(value)   { return value; } // YYYY-MM-DD
 function isoFromMonth(value, end = false) {
   // value = YYYY-MM
   const [y, m] = value.split('-').map(Number);
@@ -40,7 +40,7 @@ function isoFromYear(value, end = false) {
 }
 
 function toIso(granularity, value, end = false) {
-  if (granularity === 'day') return isoFromDay(value);
+  if (granularity === 'day') return value;
   if (granularity === 'month') return isoFromMonth(value, end);
   if (granularity === 'week') return isoFromWeek(value, end);
   if (granularity === 'year') return isoFromYear(value, end);
@@ -60,23 +60,19 @@ function defaultRange(granularity) {
   const now = new Date();
   const y = now.getFullYear();
   if (granularity === 'day') {
-    const start = new Date(y, now.getMonth(), 1);
     return {
       from: `${y}-${pad(now.getMonth() + 1)}-01`,
       to: `${y}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-      _start: start,
     };
   }
   if (granularity === 'week') {
     // 4 dernières semaines
-    const cur = new Date(Date.UTC(y, now.getMonth(), now.getDate()));
-    const dow = (cur.getUTCDay() + 6) % 7;
-    cur.setUTCDate(cur.getUTCDate() - dow + 3);
-    const ft = new Date(Date.UTC(cur.getUTCFullYear(), 0, 4));
-    const wk = 1 + Math.round(((cur - ft) / 86400000 - 3 + ((ft.getUTCDay() + 6) % 7)) / 7);
+    const current = currentISOWeek();
+    const wk = parseInt(current.slice(-2), 10);
+    const wkYear = current.slice(0, 4);
     return {
-      from: `${cur.getUTCFullYear()}-W${pad(Math.max(1, wk - 4))}`,
-      to: `${cur.getUTCFullYear()}-W${pad(wk)}`,
+      from: `${wkYear}-W${String(Math.max(1, wk - 4)).padStart(2, '0')}`,
+      to: current,
     };
   }
   if (granularity === 'month') {
@@ -177,9 +173,8 @@ const TYPE_FILTERS = [
 
 export default function StatsChart() {
   const [granularity, setGranularity] = useState('month');
-  const initial = useMemo(() => defaultRange('month'), []);
-  const [from, setFrom] = useState(initial.from);
-  const [to, setTo] = useState(initial.to);
+  const [from, setFrom] = useState(() => defaultRange('month').from);
+  const [to, setTo] = useState(() => defaultRange('month').to);
   const [typeFilter, setTypeFilter] = useState('all');
 
   const [data, setData] = useState(null);

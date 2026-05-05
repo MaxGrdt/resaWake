@@ -55,8 +55,8 @@ export const getMyReservations = () => request('/reservations/me');
 export const deleteMyReservation = (id) => request(`/reservations/${id}`, { method: 'DELETE' });
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
-export const getConfig = () => request('/admin/config');
-export const saveConfig = (config) =>
+export const adminGetConfig = () => request('/admin/config');
+export const adminSaveConfig = (config) =>
   request('/admin/config', { method: 'PUT', body: config });
 
 export const adminGetReservations = (date) =>

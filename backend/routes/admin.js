@@ -62,7 +62,7 @@ router.put('/config',
     body('dureeCreneaux').optional().isInt({ min: 5 }).withMessage('La durée doit être un entier >= 5 minutes.')
   ],
   validate,
-  adminCtrl.saveConfig
+  adminCtrl.updateConfig
 );
 
 // Réservations & blocages
@@ -94,8 +94,5 @@ router.delete('/reservations/:id', adminCtrl.deleteReservation);
 router.get('/stats', adminCtrl.getStats);
 router.get('/stats/custom', adminCtrl.getCustomStats);
 router.get('/stats/timeseries', adminCtrl.getTimeseries);
-
-// Journal d'audit
-router.get('/logs', adminCtrl.getLogs);
 
 module.exports = router;

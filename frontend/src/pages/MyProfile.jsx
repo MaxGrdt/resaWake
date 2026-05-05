@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import * as api from '../services/api';
 
-export default function MonProfil() {
+export default function MyProfile() {
   const { auth, updateAuth } = useAuth();
 
   const [infos, setInfos] = useState({

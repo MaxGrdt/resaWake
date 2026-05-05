@@ -2,20 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import * as api from '../services/api';
-
-function todayISO() {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - off * 60 * 1000);
-  return local.toISOString().slice(0, 10);
-}
-
-function shiftDate(iso, days) {
-  const d = new Date(iso + 'T12:00:00');
-  d.setDate(d.getDate() + days);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60 * 1000).toISOString().slice(0, 10);
-}
+import { todayISO, shiftDate } from '../utils/date';
 
 export default function UserDashboard() {
   const location = useLocation();
@@ -23,15 +10,14 @@ export default function UserDashboard() {
   const nomComplet = `${auth?.prenom || ''} ${auth?.nom || ''}`.trim();
   const [date, setDate] = useState(todayISO());
   const [slotsData, setSlotsData] = useState(null);
-  const [myResas, setMyResas] = useState([]);
+  const [myReservations, setMyReservations] = useState([]);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const scrollTimerRef = useRef(null);
 
   const loadSlots = useCallback(async () => {
     setError(null);
-    setLoading(true);
     try {
       const data = await api.getSlots(date);
       setSlotsData(data);
@@ -39,23 +25,23 @@ export default function UserDashboard() {
       setError(err.message);
       setSlotsData(null);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [date]);
 
-  const loadMyResas = useCallback(async () => {
+  const loadMyReservations = useCallback(async () => {
     try {
       const data = await api.getMyReservations();
-      setMyResas(data);
+      setMyReservations(data);
     } catch (err) {
       console.error(err);
     }
   }, []);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadSlots(); }, [loadSlots]);
+  useEffect(() => { setInitialLoading(true); loadSlots(); }, [loadSlots]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadMyResas(); }, [loadMyResas]);
+  useEffect(() => { loadMyReservations(); }, [loadMyReservations]);
 
   // Scroll automatique si on arrive depuis la Navbar via navigate(state)
   useEffect(() => {
@@ -113,7 +99,7 @@ export default function UserDashboard() {
     try {
       await api.deleteMyReservation(id);
       setInfo('Réservation annulée.');
-      await Promise.all([loadSlots(), loadMyResas()]);
+      await Promise.all([loadSlots(), loadMyReservations()]);
     } catch (err) {
       setError(err.message);
     }
@@ -125,7 +111,7 @@ export default function UserDashboard() {
     try {
       await api.createReservation(date, heure, ligne);
       setInfo(`Créneau ${heure} ligne ${ligne} réservé !`);
-      await Promise.all([loadSlots(), loadMyResas()]);
+      await Promise.all([loadSlots(), loadMyReservations()]);
     } catch (err) {
       setError(err.message);
     }
@@ -144,8 +130,8 @@ export default function UserDashboard() {
 
   // Index des réservations du user pour la date sélectionnée (heure-ligne)
   // Comparaison en heure locale pour éviter décalage de fuseau horaire
-  const myResaKeys = new Set(
-    myResas
+  const myReservationKeys = new Set(
+    myReservations
       .filter(r => {
         const d = new Date(r.date);
         const localISO = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -285,13 +271,13 @@ export default function UserDashboard() {
         {error && <div className="alert alert-error">{error}</div>}
         {info && <div className="alert alert-success">{info}</div>}
 
-        {loading && <p>Chargement…</p>}
+        {initialLoading && <p>Chargement…</p>}
 
-        {!loading && slotsData && heures.length === 0 && (
+        {!initialLoading && slotsData && heures.length === 0 && (
           <p className="muted">{slotsData.message || 'Aucun créneau ce jour-là.'}</p>
         )}
 
-        {!loading && heures.length > 0 && (
+        {!initialLoading && heures.length > 0 && (
           <table className="slots-table">
             <thead>
               <tr>
@@ -316,7 +302,7 @@ export default function UserDashboard() {
                           </button>
                         ) : slot.statut === 'blocage' ? (
                           <span className="badge badge-blocked">Bloqué</span>
-                        ) : myResaKeys.has(`${h}-${ligne}`) ? (
+                        ) : myReservationKeys.has(`${h}-${ligne}`) ? (
                           <span className="badge badge-taken">{nomComplet}</span>
                         ) : (
                           <span className="badge badge-taken">Réservé</span>
@@ -333,11 +319,11 @@ export default function UserDashboard() {
 
       <div className="card" id="mes-reservations">
         <h2>Mes réservations à venir</h2>
-        {myResas.length === 0 ? (
+        {myReservations.length === 0 ? (
           <p className="muted">Aucune réservation.</p>
         ) : (
           <ul className="resa-list">
-            {myResas.map((r) => (
+            {myReservations.map((r) => (
               <li key={r._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
                 <span>
                   <strong>{new Date(r.date).toLocaleDateString('fr-FR')}</strong>

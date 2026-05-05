@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { adminGetStats, adminGetCustomStats } from '../../services/api';
+import { useState, useEffect } from 'react';
+import { adminGetStats } from '../../services/api';
+import { useCustomStats } from '../../hooks/useCustomStats';
+import { currentISOWeek } from '../../utils/date';
 import StatsChart from './StatsChart';
 
 const PERIODS = [
@@ -16,17 +18,6 @@ const TYPE_LABELS = {
   year: 'Année',
 };
 
-// Vérifie que la valeur correspond bien au type avant d'appeler l'API
-// (évite l'appel parasite quand type change mais value n'est pas encore réinitialisée)
-function valueMatchesType(type, value) {
-  if (!value) return false;
-  if (type === 'day')   return /^\d{4}-\d{2}-\d{2}$/.test(value);
-  if (type === 'week')  return /^\d{4}-W\d{2}$/.test(value);
-  if (type === 'month') return /^\d{4}-\d{2}$/.test(value) && !value.includes('W');
-  if (type === 'year')  return /^\d{4}$/.test(value);
-  return false;
-}
-
 // Valeurs par défaut pour chaque type (date d'aujourd'hui)
 function defaultValues() {
   const now = new Date();
@@ -34,16 +25,9 @@ function defaultValues() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
 
-  // Numéro de semaine ISO
-  const tmp = new Date(Date.UTC(yyyy, now.getMonth(), now.getDate()));
-  const dayNum = (tmp.getUTCDay() + 6) % 7;
-  tmp.setUTCDate(tmp.getUTCDate() - dayNum + 3);
-  const firstThursday = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 4));
-  const weekNum = 1 + Math.round(((tmp - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
-
   return {
     day: `${yyyy}-${mm}-${dd}`,
-    week: `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`,
+    week: currentISOWeek(),
     month: `${yyyy}-${mm}`,
     year: String(yyyy),
   };
@@ -87,19 +71,12 @@ export default function AdminStats() {
   const [period, setPeriod] = useState('day');
 
   // Recherche personnalisée — totaux
-  const initial = useMemo(() => defaultValues(), []);
   const [totType, setTotType] = useState('day');
-  const [totValue, setTotValue] = useState(initial.day);
-  const [totData, setTotData] = useState(null);
-  const [totLoading, setTotLoading] = useState(false);
-  const [totError, setTotError] = useState(null);
+  const [totValue, setTotValue] = useState(() => defaultValues().day);
 
   // Recherche personnalisée — par adhérent
   const [userType, setUserType] = useState('day');
-  const [userValue, setUserValue] = useState(initial.day);
-  const [userData, setUserData] = useState(null);
-  const [userLoading, setUserLoading] = useState(false);
-  const [userError, setUserError] = useState(null);
+  const [userValue, setUserValue] = useState(() => defaultValues().day);
 
   // Quand on change le type → reset sur la valeur par défaut courante
   useEffect(() => { setTotValue(defaultValues()[totType]); }, [totType]);
@@ -108,39 +85,23 @@ export default function AdminStats() {
   // Chargement initial des stats prédéfinies
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    adminGetStats()
-      .then((data) => { if (!cancelled) setStats(data); })
-      .catch((err) => { if (!cancelled) setError(err.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await adminGetStats();
+        if (!cancelled) setStats(data);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
   }, []);
 
-  // Recherche totaux personnalisés
-  const fetchTotals = useCallback(() => {
-    if (!valueMatchesType(totType, totValue)) return;
-    setTotLoading(true);
-    setTotError(null);
-    adminGetCustomStats(totType, totValue)
-      .then(setTotData)
-      .catch((err) => setTotError(err.message))
-      .finally(() => setTotLoading(false));
-  }, [totType, totValue]);
-
-  // Recherche par adhérent personnalisée
-  const fetchUsers = useCallback(() => {
-    if (!valueMatchesType(userType, userValue)) return;
-    setUserLoading(true);
-    setUserError(null);
-    adminGetCustomStats(userType, userValue)
-      .then(setUserData)
-      .catch((err) => setUserError(err.message))
-      .finally(() => setUserLoading(false));
-  }, [userType, userValue]);
-
-  useEffect(() => { fetchTotals(); }, [fetchTotals]);
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const { data: totData, loading: totLoading, error: totError } = useCustomStats(totType, totValue);
+  const { data: userData, loading: userLoading, error: userError } = useCustomStats(userType, userValue);
 
   if (loading) return <div className="card"><p>Chargement…</p></div>;
   if (error) return <div className="card"><div className="alert alert-error">{error}</div></div>;
@@ -239,7 +200,7 @@ export default function AdminStats() {
               </thead>
               <tbody>
                 {perUser.map((u) => (
-                  <tr key={(u.userId || '') + (u.type || '') + (u.email || '') + Math.random()}>
+                  <tr key={(u.userId || u.type || '') + '-' + (u.email || '')}>
                     <td>{u.type === 'blocage' ? <span className="muted">Réservation bloquée</span> : u.prenom || u.nom ? `${u.prenom || ''} ${u.nom || ''}`.trim() : <span className="muted">— compte supprimé —</span>}</td>
                     <td><strong>{u.count}</strong></td>
                   </tr>
@@ -274,7 +235,7 @@ export default function AdminStats() {
                   </thead>
                   <tbody>
                     {userData.perUser.map((u) => (
-                      <tr key={(u.userId || '') + (u.type || '') + (u.email || '') + Math.random()}>
+                      <tr key={(u.userId || u.type || '') + '-' + (u.email || '')}>
                         <td>{u.type === 'blocage' ? <span className="muted">Réservation bloquée</span> : u.prenom || u.nom ? `${u.prenom || ''} ${u.nom || ''}`.trim() : <span className="muted">— compte supprimé —</span>}</td>
                         <td><strong>{u.count}</strong></td>
                       </tr>

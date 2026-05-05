@@ -1,12 +1,13 @@
 const OpeningConfig = require('../models/openingConfig');
 const Reservation = require('../models/reservation');
 const User = require('../models/user');
-const AuditLog = require('../models/auditLog');
 const { sendCredentialsEmail } = require('../services/mailer');
 const logAction = require('../services/auditLog');
-const { ACTIONS } = require('../services/auditLog');
+const { ACTIONS } = logAction;
 // ─── Gestion des adhérents ─────────────────────────────────────────────────
 
+// GET /api/admin/users
+// Retourne la liste de tous les adhérents (rôle 'user'), triés par nom puis prénom.
 exports.getUsers = async (req, res) => {
   try {
     const users = await User.find({ role: 'user' })
@@ -18,8 +19,13 @@ exports.getUsers = async (req, res) => {
   }
 };
 
+// DELETE /api/admin/users/:id
+// Supprime un adhérent (ne peut pas supprimer un compte admin).
 exports.deleteUser = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
+      return res.status(400).json({ message: 'Identifiant adhérent invalide.' });
+    }
     const user = await User.findOneAndDelete({ _id: req.params.id, role: 'user' });
     if (!user) return res.status(404).json({ message: 'Adhérent introuvable.' });
     logAction(req.auth.userId, 'admin', ACTIONS.SUPPRESSION_ADHERENT, { userId: user._id, nom: user.nom, prenom: user.prenom, email: user.email });
@@ -29,8 +35,13 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
+// PUT /api/admin/users/:id
+// Met à jour les champs autorisés d'un adhérent (ne peut pas modifier le mot de passe ni le rôle).
 exports.updateUser = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
+      return res.status(400).json({ message: 'Identifiant adhérent invalide.' });
+    }
     const allowed = ['prenom', 'nom', 'email', 'telephone', 'forfaitSaison'];
     const updates = {};
     for (const key of allowed) {
@@ -59,12 +70,14 @@ exports.sendCredentials = async (req, res) => {
     logAction(req.auth.userId, 'admin', ACTIONS.ENVOI_IDENTIFIANTS, { email, nom, prenom });
     res.status(200).json({ message: 'Email envoyé.' });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Erreur lors de l\'envoi de l\'email.' });
+    res.status(500).json({ message: 'Erreur lors de l\'envoi de l\'email.' });
   }
 };
 
 // ─── Configuration d'ouverture ────────────────────────────────────────────────
 
+// GET /api/admin/config
+// Retourne la configuration d'ouverture du parc (singleton).
 exports.getConfig = async (req, res) => {
   try {
     const config = await OpeningConfig.findOne().populate('updatedBy', 'nom prenom email');
@@ -76,7 +89,7 @@ exports.getConfig = async (req, res) => {
 };
 
 // Crée la config si elle n'existe pas, la met à jour sinon (singleton)
-exports.saveConfig = async (req, res) => {
+exports.updateConfig = async (req, res) => {
   try {
     const { joursSemaine, heureOuverture, heureFermeture, dureeCreneaux, joursExceptionnellementFermes, lignesOuvertes } = req.body;
 
@@ -115,6 +128,9 @@ exports.getAllReservations = async (req, res) => {
   try {
     const filter = {};
     if (req.query.date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
+        return res.status(400).json({ message: 'Format de date invalide (YYYY-MM-DD).' });
+      }
       const day = new Date(req.query.date);
       const nextDay = new Date(day);
       nextDay.setDate(nextDay.getDate() + 1);
@@ -160,11 +176,22 @@ exports.createReservation = async (req, res) => {
 };
 
 // PUT /api/admin/reservations/:id
+// Met à jour les champs d'une réservation ou d'un blocage existant.
 exports.updateReservation = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
+      return res.status(400).json({ message: 'Identifiant de réservation invalide.' });
+    }
+    const allowed = ['date', 'heure', 'ligne', 'type', 'clientNom'];
+    const updates = {};
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updates[key] = req.body[key];
+      }
+    }
     const reservation = await Reservation.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
     if (!reservation) return res.status(404).json({ message: 'Réservation introuvable.' });
@@ -180,6 +207,9 @@ exports.updateReservation = async (req, res) => {
 // DELETE /api/admin/reservations/:id
 exports.deleteReservation = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
+      return res.status(400).json({ message: 'Identifiant de réservation invalide.' });
+    }
     const reservation = await Reservation.findByIdAndDelete(req.params.id);
     if (!reservation) return res.status(404).json({ message: 'Réservation introuvable.' });
     logAction(req.auth.userId, 'admin', ACTIONS.SUPPRESSION_RESERVATION, { date: reservation.date, heure: reservation.heure, ligne: reservation.ligne, type: reservation.type, userId: reservation.userId });
@@ -190,31 +220,6 @@ exports.deleteReservation = async (req, res) => {
 };
 
 // Statistiques ────────────────────────────────────────────────────────────
-
-// GET /api/admin/logs?actorRole=admin|user&action=...&from=YYYY-MM-DD&to=YYYY-MM-DD
-exports.getLogs = async (req, res) => {
-  try {
-    const filter = {};
-    if (req.query.actorRole) filter.actorRole = req.query.actorRole;
-    if (req.query.action)    filter.action    = req.query.action;
-    if (req.query.from || req.query.to) {
-      filter.createdAt = {};
-      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
-      if (req.query.to) {
-        const to = new Date(req.query.to);
-        to.setDate(to.getDate() + 1);
-        filter.createdAt.$lt = to;
-      }
-    }
-    const logs = await AuditLog.find(filter)
-      .populate('actorId', 'nom prenom email role')
-      .sort({ createdAt: -1 })
-      .limit(1000);
-    res.status(200).json(logs);
-  } catch (error) {
-    res.status(500).json({ message: 'Erreur serveur.' });
-  }
-};
 
 // GET /api/admin/stats
 // Retourne les compteurs de réservations (type='reservation') par période :
@@ -374,10 +379,6 @@ exports.getTimeseries = async (req, res) => {
       return res.status(400).json({ message: 'La date de début doit être antérieure à la date de fin.' });
     }
 
-    const unitMap = { day: 'day', week: 'week', month: 'month', year: 'year' };
-
-    // toDate représente le dernier jour inclus (envoyé en YYYY-MM-DD = UTC midnight).
-    // Pour l'inclure entièrement, on étend le filtre haut au début du jour suivant.
     const toDateExclusive = new Date(toDate.getTime() + 24 * 60 * 60 * 1000);
 
     // Construit la pipeline de match selon le filtre demandé.
@@ -417,7 +418,7 @@ exports.getTimeseries = async (req, res) => {
           _id: {
             $dateTrunc: {
               date: '$date',
-              unit: unitMap[granularity],
+              unit: granularity,
               ...(granularity === 'week' ? { startOfWeek: 'monday' } : {}),
             },
           },

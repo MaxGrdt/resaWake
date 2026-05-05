@@ -31,7 +31,7 @@ export default function AdminConfig() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await api.getConfig();
+        const data = await api.adminGetConfig();
         setConfig({
           joursSemaine: data.joursSemaine || [],
           heureOuverture: data.heureOuverture || '09:00',
@@ -91,7 +91,7 @@ export default function AdminConfig() {
     setError(null);
     setInfo(null);
     try {
-      await api.saveConfig(config);
+      await api.adminSaveConfig(config);
       setInfo('Configuration enregistrée !');
     } catch (err) {
       setError(err.message);

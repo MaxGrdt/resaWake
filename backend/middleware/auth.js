@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+// Middleware d'authentification : vérifie le token JWT Bearer dans l'en-tête Authorization.
+// Si valide, injecte req.auth = { userId, role } pour les middlewares suivants.
 module.exports = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;

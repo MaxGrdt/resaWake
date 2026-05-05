@@ -1,7 +1,18 @@
 const nodemailer = require('nodemailer');
 
+/** Échappe les caractères HTML spéciaux pour prévenir l'injection dans le corps de l'email. */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 let cachedTransporter = null;
 
+// Construit le transporteur Nodemailer à partir des variables SMTP d'environnement.
+// Retourne null si la configuration SMTP est incomplète (email désactivé silencieusement).
 function buildTransporter() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
@@ -13,11 +24,14 @@ function buildTransporter() {
   });
 }
 
+// Retourne le transporteur mis en cache (singleton). Le construit à la première utilisation.
 function getTransporter() {
   if (!cachedTransporter) cachedTransporter = buildTransporter();
   return cachedTransporter;
 }
 
+// Envoie un email avec les identifiants de connexion à un nouvel adhérent.
+// Lance une erreur si le service SMTP n'est pas configuré.
 exports.sendCredentialsEmail = async ({ email, prenom, nom, password }) => {
   const transporter = getTransporter();
   if (!transporter) {
@@ -25,7 +39,7 @@ exports.sendCredentialsEmail = async ({ email, prenom, nom, password }) => {
   }
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
 
-  const appUrl = 'https://resawake.fr';
+  const appUrl = process.env.APP_URL || 'https://resawake.fr';
 
   const text = `Bonjour ${prenom} ${nom},
 
@@ -41,14 +55,14 @@ Connectez-vous dès maintenant : ${appUrl}
 À bientôt sur ResaWake !`;
 
   const html = `
-    <p>Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p>Bonjour <strong>${escHtml(prenom)} ${escHtml(nom)}</strong>,</p>
     <p>Votre compte ResaWake a été créé. Voici vos identifiants de connexion :</p>
     <ul>
-      <li><strong>Email :</strong> ${email}</li>
-      <li><strong>Mot de passe :</strong> <code>${password}</code></li>
+      <li><strong>Email :</strong> ${escHtml(email)}</li>
+      <li><strong>Mot de passe :</strong> <code>${escHtml(password)}</code></li>
     </ul>
     <p>
-      <a href="${appUrl}" style="display:inline-block;padding:10px 20px;background-color:#0ea5e9;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
+      <a href="${escHtml(appUrl)}" style="display:inline-block;padding:10px 20px;background-color:#0ea5e9;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
         Se connecter à ResaWake
       </a>
     </p>

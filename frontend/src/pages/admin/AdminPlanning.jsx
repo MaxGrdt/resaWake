@@ -1,18 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from '../../services/api';
-
-function todayISO() {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function shiftDate(iso, days) {
-  const d = new Date(iso + 'T12:00:00');
-  d.setDate(d.getDate() + days);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60 * 1000).toISOString().slice(0, 10);
-}
+import { todayISO, shiftDate } from '../../utils/date';
 
 export default function AdminPlanning() {
   const [date, setDate] = useState(todayISO());
@@ -59,9 +47,9 @@ export default function AdminPlanning() {
   useEffect(() => { setInitialLoading(true); reload(); }, [reload]);
 
   // Index par "heure-ligne" pour retrouver l'objet réservation complet
-  const resaByKey = {};
+  const reservationByKey = {};
   for (const r of reservations) {
-    resaByKey[`${r.heure}-${r.ligne}`] = r;
+    reservationByKey[`${r.heure}-${r.ligne}`] = r;
   }
 
   // Regroupe les créneaux par heure
@@ -178,7 +166,7 @@ export default function AdminPlanning() {
                 <td className="hour">{h}</td>
                 {lignes.map((ligne) => {
                   const slot = grouped[h][ligne];
-                  const resa = resaByKey[`${h}-${ligne}`];
+                  const resa = reservationByKey[`${h}-${ligne}`];
                   return (
                     <td key={ligne}>
                       {slot.statut === 'disponible' ? (

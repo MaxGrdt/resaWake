@@ -50,7 +50,7 @@ export default function Navbar() {
           <>
             {auth.role !== 'admin' && (
               <>
-                <Link to="/profil" className="nav-link">Mon profil</Link>
+                <Link to="/profile" className="nav-link">Mon profil</Link>
                 <a href="#mes-reservations" onClick={scrollToResas} className="nav-link">Mes réservations</a>
               </>
             )}
@@ -81,7 +81,7 @@ export default function Navbar() {
         <div className="navbar-mobile-menu">
           {auth.role !== 'admin' && (
             <>
-              <Link to="/profil" className="mobile-nav-link" onClick={() => setMenuOpen(false)}>Mon profil</Link>
+              <Link to="/profile" className="mobile-nav-link" onClick={() => setMenuOpen(false)}>Mon profil</Link>
               <a href="#mes-reservations" onClick={scrollToResas} className="mobile-nav-link">Mes réservations</a>
             </>
           )}

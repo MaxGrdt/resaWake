@@ -1,10 +1,10 @@
 const OpeningConfig = require('../models/openingConfig');
 const Reservation = require('../models/reservation');
 const logAction = require('../services/auditLog');
-const { ACTIONS } = require('../services/auditLog');
+const { ACTIONS } = logAction;
 
 // Génère tous les horaires d'une journée à partir de la config (ex: ["09:00","09:20",...])
-function genererHoraires(heureOuverture, heureFermeture, dureeMinutes) {
+function generateSlots(heureOuverture, heureFermeture, dureeMinutes) {
   const slots = [];
   const [hOuv, mOuv] = heureOuverture.split(':').map(Number);
   const [hFer, mFer] = heureFermeture.split(':').map(Number);
@@ -43,7 +43,7 @@ exports.getSlots = async (req, res) => {
     }
 
     // Générer tous les horaires théoriques
-    const timeSlots = genererHoraires(config.heureOuverture, config.heureFermeture, config.dureeCreneaux);
+    const timeSlots = generateSlots(config.heureOuverture, config.heureFermeture, config.dureeCreneaux);
 
     // Charger toutes les réservations et blocages du jour
     const nextDay = new Date(day);
@@ -102,7 +102,7 @@ exports.createReservation = async (req, res) => {
     }
 
     // Vérifier que l'heure est un créneau valide
-    const validSlots = genererHoraires(config.heureOuverture, config.heureFermeture, config.dureeCreneaux);
+    const validSlots = generateSlots(config.heureOuverture, config.heureFermeture, config.dureeCreneaux);
     if (!validSlots.includes(heure)) {
       return res.status(400).json({ message: `Créneau invalide. Horaires disponibles : ${validSlots.join(', ')}.` });
     }
@@ -150,6 +150,9 @@ exports.getMyReservations = async (req, res) => {
 exports.deleteMyReservation = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      return res.status(400).json({ message: 'Identifiant de réservation invalide.' });
+    }
     const reservation = await Reservation.findOne({
       _id: id,
       userId: req.auth.userId,

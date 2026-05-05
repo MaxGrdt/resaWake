@@ -2,29 +2,35 @@ const User = require('../models/user');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const logAction = require('../services/auditLog');
-const { ACTIONS } = require('../services/auditLog');
+const { ACTIONS } = logAction;
 
-exports.signup = (req, res) => {
-  bcrypt.hash(req.body.password, 10)
-    .then(hash => {
-      const user = new User({
-        email: req.body.email,
-        password: hash,
-        nom: req.body.nom,
-        prenom: req.body.prenom,
-        telephone: req.body.telephone,
-        forfaitSaison: !!req.body.forfaitSaison
-      });
-      user.save()
-        .then(() => {
-          if (req.auth) logAction(req.auth.userId, 'admin', ACTIONS.CREATION_ADHERENT, { email: req.body.email, nom: req.body.nom, prenom: req.body.prenom });
-          res.status(201).json({ message: 'Utilisateur créé !' });
-        })
-        .catch(() => res.status(400).json({ message: 'Cet email est déjà utilisé.' }));
-    })
-    .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
+// POST /api/admin/users  (appelé par un admin) ou POST /api/auth/signup
+// Crée un nouvel utilisateur avec le mot de passe hashé.
+// Si req.auth est présent, l'action est journalisée comme création admin.
+exports.signup = async (req, res) => {
+  try {
+    const hash = await bcrypt.hash(req.body.password, 10);
+    const user = new User({
+      email: req.body.email,
+      password: hash,
+      nom: req.body.nom,
+      prenom: req.body.prenom,
+      telephone: req.body.telephone,
+      forfaitSaison: !!req.body.forfaitSaison
+    });
+    await user.save();
+    if (req.auth) logAction(req.auth.userId, 'admin', ACTIONS.CREATION_ADHERENT, { email: req.body.email, nom: req.body.nom, prenom: req.body.prenom });
+    res.status(201).json({ message: 'Utilisateur créé !' });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Cet email est déjà utilisé.' });
+    }
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
 };
 
+// GET /api/auth/me
+// Retourne le profil de l'utilisateur connecté (sans le mot de passe).
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.auth.userId).select('-password');
@@ -40,6 +46,9 @@ exports.getMe = async (req, res) => {
   }
 };
 
+// PUT /api/auth/me
+// Met à jour le profil (nom, prénom, téléphone) et optionnellement le mot de passe.
+// Le changement de mot de passe nécessite de fournir currentPassword correct.
 exports.updateMe = async (req, res) => {
   try {
     const { nom, prenom, telephone, currentPassword, newPassword } = req.body;
@@ -70,31 +79,31 @@ exports.updateMe = async (req, res) => {
   }
 };
 
-exports.login = (req, res) => {
-  User.findOne({ email: req.body.email })
-       .then(user => {
-           if (!user) {
-               return res.status(401).json({ message: 'Paire login/mot de passe incorrecte'});
-           }
-           bcrypt.compare(req.body.password, user.password)
-               .then(valid => {
-                   if (!valid) {
-                       return res.status(401).json({ message: 'Paire login/mot de passe incorrecte' });
-                   }
-                   res.status(200).json({
-                       userId: user._id,
-                       role: user.role,
-                       nom: user.nom,
-                       prenom: user.prenom,
-                       token: jwt.sign(
-                        { userId: user._id, role: user.role },
-                        process.env.JWT_SECRET,
-                        { expiresIn: '24h' }
-                        )
-                    });
-                    logAction(user._id, user.role, ACTIONS.CONNEXION, { email: user.email });
-                })
-               .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
-        })
-       .catch(() => res.status(500).json({ message: 'Erreur serveur.' }));
+// POST /api/auth/login
+// Vérifie les identifiants et retourne un JWT signé valable 24h.
+exports.login = async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) {
+      return res.status(401).json({ message: 'Paire login/mot de passe incorrecte' });
+    }
+    const valid = await bcrypt.compare(req.body.password, user.password);
+    if (!valid) {
+      return res.status(401).json({ message: 'Paire login/mot de passe incorrecte' });
+    }
+    res.status(200).json({
+      userId: user._id,
+      role: user.role,
+      nom: user.nom,
+      prenom: user.prenom,
+      token: jwt.sign(
+        { userId: user._id, role: user.role },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      )
+    });
+    logAction(user._id, user.role, ACTIONS.CONNEXION, { email: user.email });
+  } catch {
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
 };

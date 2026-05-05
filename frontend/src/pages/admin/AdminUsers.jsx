@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import * as api from '../../services/api';
 
 const EMPTY = { email: '', password: '', nom: '', prenom: '', telephone: '', forfaitSaison: false };
@@ -13,30 +13,16 @@ function generatePassword(length = 12) {
 
 export default function AdminUsers() {
   const [form, setForm] = useState(EMPTY);
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef(null);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
   function handleGenerate() {
-    const pwd = generatePassword();
-    update('password', pwd);
-    setCopied(false);
-  }
-
-  function handleCopy() {
-    navigator.clipboard.writeText(form.password).then(() => {
-      setCopied(true);
-      clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
-    });
+    update('password', generatePassword());
   }
 
   async function handleSubmit(e) {

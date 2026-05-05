@@ -17,6 +17,6 @@ module.exports = (err, req, res, next) => {
     return res.status(401).json({ message: 'Token invalide ou expiré.' });
   }
 
-  // Erreur générique
-  res.status(err.status || 500).json({ message: err.message || 'Erreur interne du serveur.' });
+  // Erreur générique — ne pas exposer err.message au client
+  res.status(err.status || 500).json({ message: 'Erreur interne du serveur.' });
 };

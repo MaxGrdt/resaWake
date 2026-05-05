@@ -4,7 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import UserDashboard from './pages/UserDashboard';
 import AdminDashboard from './pages/AdminDashboard';
-import MonProfil from './pages/MonProfil';
+import MyProfile from './pages/MyProfile';
 import { useAuth } from './hooks/useAuth';
 
 function Home() {
@@ -38,10 +38,10 @@ export default function App() {
             }
           />
           <Route
-            path="/profil"
+            path="/profile"
             element={
               <ProtectedRoute>
-                <MonProfil />
+                <MyProfile />
               </ProtectedRoute>
             }
           />
