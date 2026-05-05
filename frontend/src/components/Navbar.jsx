@@ -46,7 +46,7 @@ export default function Navbar() {
 
       {/* Liens desktop */}
       <div className="navbar-links navbar-links--desktop">
-        {auth ? (
+        {auth && (
           <>
             {auth.role !== 'admin' && (
               <>
@@ -56,8 +56,6 @@ export default function Navbar() {
             )}
             <button onClick={handleLogout} className="btn btn-ghost">Déconnexion</button>
           </>
-        ) : (
-          <Link to="/login">Connexion</Link>
         )}
       </div>
 

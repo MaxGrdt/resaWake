@@ -10,6 +10,13 @@ function todayISO() {
   return local.toISOString().slice(0, 10);
 }
 
+function shiftDate(iso, days) {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60 * 1000).toISOString().slice(0, 10);
+}
+
 export default function UserDashboard() {
   const location = useLocation();
   const { auth } = useAuth();
@@ -64,6 +71,19 @@ export default function UserDashboard() {
   const [pending, setPending] = useState(null); // { heure, ligne }
   const [cancelTarget, setCancelTarget] = useState(null); // resa à annuler
   const [tooLateMessage, setTooLateMessage] = useState(null); // string
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Affiche le pop-up d'accueil une fois par session pour les adhérents
+  useEffect(() => {
+    if (!auth || auth.role === 'admin') return;
+    if (sessionStorage.getItem('welcomeSeen') === '1') return;
+    setShowWelcome(true);
+  }, [auth]);
+
+  function closeWelcome() {
+    sessionStorage.setItem('welcomeSeen', '1');
+    setShowWelcome(false);
+  }
 
   function startMs(resa) {
     const [hh, mm] = (resa.heure || '00:00').split(':').map(Number);
@@ -149,6 +169,33 @@ export default function UserDashboard() {
     <div className="page">
       <h1>Réserver un créneau</h1>
 
+      {/* Pop-up d'accueil (une fois par session) */}
+      {showWelcome && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={closeWelcome}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 12, padding: '2rem', maxWidth: 420, width: '90%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.18)', textAlign: 'center',
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>Information</h2>
+            <p style={{ fontSize: '1.05rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              Créneau indisponible ? Appelez le parc, nous ferons notre possible pour vous trouver une place&nbsp;!
+            </p>
+            <button className="btn btn-primary" onClick={closeWelcome} autoFocus>Fermer</button>
+          </div>
+        </div>
+      )}
+
       {/* Modale de confirmation d'annulation */}
       {cancelTarget && (
         <div style={{
@@ -214,15 +261,26 @@ export default function UserDashboard() {
       )}
 
       <div className="card">
-        <label className="row">
+        <div className="row" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span>Date :</span>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setDate((d) => shiftDate(d, -1))}
+            title="Jour précédent"
+            disabled={date <= todayISO()}
+          >◀</button>
           <input
             type="date"
             value={date}
             min={todayISO()}
             onChange={(e) => setDate(e.target.value)}
           />
-        </label>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setDate((d) => shiftDate(d, 1))}
+            title="Jour suivant"
+          >▶</button>
+        </div>
 
         {error && <div className="alert alert-error">{error}</div>}
         {info && <div className="alert alert-success">{info}</div>}

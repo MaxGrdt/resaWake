@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, query } = require('express-validator');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const resaCtrl = require('../controllers/reservations');
+const reservationsCtrl = require('../controllers/reservations');
 
 // Toutes les routes nécessitent un token valide
 router.use(auth);
@@ -11,12 +11,12 @@ router.use(auth);
 router.get('/slots',
   [query('date').isISO8601().withMessage('Paramètre date invalide (format attendu : YYYY-MM-DD).')],
   validate,
-  resaCtrl.getSlots
+  reservationsCtrl.getSlots
 );
 
-router.get('/reservations/me', resaCtrl.getMyReservations);
+router.get('/reservations/me', reservationsCtrl.getMyReservations);
 
-router.delete('/reservations/:id', resaCtrl.deleteMyReservation);
+router.delete('/reservations/:id', reservationsCtrl.deleteMyReservation);
 
 router.post('/reservations',
   [
@@ -25,7 +25,7 @@ router.post('/reservations',
     body('ligne').toInt().isInt({ min: 1, max: 2 }).withMessage('La ligne doit être 1 ou 2.')
   ],
   validate,
-  resaCtrl.createReservation
+  reservationsCtrl.createReservation
 );
 
 module.exports = router;

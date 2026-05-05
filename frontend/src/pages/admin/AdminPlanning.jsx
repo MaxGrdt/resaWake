@@ -21,7 +21,6 @@ export default function AdminPlanning() {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
   // Charge la liste des adhérents une fois (triée par nom puis prénom)
@@ -38,9 +37,10 @@ export default function AdminPlanning() {
       .catch(() => { /* silencieux : la cellule restera utilisable pour bloquer */ });
   }, []);
 
+  const [initialLoading, setInitialLoading] = useState(true);
+
   const reload = useCallback(async () => {
     setError(null);
-    setLoading(true);
     try {
       const [slots, resas] = await Promise.all([
         api.getSlots(date),
@@ -51,12 +51,12 @@ export default function AdminPlanning() {
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [date]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { setInitialLoading(true); reload(); }, [reload]);
 
   // Index par "heure-ligne" pour retrouver l'objet réservation complet
   const resaByKey = {};
@@ -78,9 +78,16 @@ export default function AdminPlanning() {
   async function bloquer(heure, ligne) {
     setError(null);
     setInfo(null);
+    const saisi = window.prompt('Nom du client :', '');
+    if (saisi === null) return; // annulation
+    const clientNom = saisi.trim();
+    if (!clientNom) {
+      setError('Le nom du client est requis pour bloquer un créneau.');
+      return;
+    }
     try {
-      await api.adminCreateReservation({ date, heure, ligne, type: 'blocage' });
-      setInfo(`Créneau ${heure} ligne ${ligne} bloqué.`);
+      await api.adminCreateReservation({ date, heure, ligne, type: 'blocage', clientNom });
+      setInfo(`Créneau ${heure} ligne ${ligne} bloqué pour ${clientNom}.`);
       await reload();
     } catch (err) {
       setError(err.message);
@@ -150,13 +157,13 @@ export default function AdminPlanning() {
       {error && <div className="alert alert-error">{error}</div>}
       {info && <div className="alert alert-success">{info}</div>}
 
-      {loading && <p>Chargement…</p>}
+      {initialLoading && <p>Chargement…</p>}
 
-      {!loading && slotsData && heures.length === 0 && (
+      {!initialLoading && slotsData && heures.length === 0 && (
         <p className="muted">{slotsData.message || 'Aucun créneau ce jour-là.'}</p>
       )}
 
-      {!loading && heures.length > 0 && (
+      {!initialLoading && heures.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
         <table className="slots-table">
           <thead>
@@ -186,7 +193,7 @@ export default function AdminPlanning() {
                           }}
                         >
                           <option value="" disabled hidden></option>
-                          <option value="__blocage__">Bloquer le créneau</option>
+                          <option value="__blocage__">Saisir le nom du client</option>
                           {users.length > 0 && (
                             <optgroup label="Réserver pour un adhérent">
                               {users.map((u) => (
@@ -200,7 +207,7 @@ export default function AdminPlanning() {
                         ) : null
                       ) : slot.statut === 'blocage' ? (
                         <div className="cell-busy">
-                          <span className="badge badge-blocked">Bloqué</span>
+                          <span className="badge badge-blocked">{resa?.clientNom || 'Bloqué'}</span>
                           {editMode && resa && (
                             <button className="btn btn-sm btn-ghost" onClick={() => supprimer(resa._id)}>
                               ✕

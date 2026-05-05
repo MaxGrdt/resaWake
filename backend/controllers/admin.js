@@ -1,9 +1,10 @@
 const OpeningConfig = require('../models/openingConfig');
 const Reservation = require('../models/reservation');
-const User = require('../models/users');
+const User = require('../models/user');
 const AuditLog = require('../models/auditLog');
 const { sendCredentialsEmail } = require('../services/mailer');
 const logAction = require('../services/auditLog');
+const { ACTIONS } = require('../services/auditLog');
 // ─── Gestion des adhérents ─────────────────────────────────────────────────
 
 exports.getUsers = async (req, res) => {
@@ -21,7 +22,7 @@ exports.deleteUser = async (req, res) => {
   try {
     const user = await User.findOneAndDelete({ _id: req.params.id, role: 'user' });
     if (!user) return res.status(404).json({ message: 'Adhérent introuvable.' });
-    logAction(req.auth.userId, 'admin', 'SUPPRESSION_ADHERENT', { userId: user._id, nom: user.nom, prenom: user.prenom, email: user.email });
+    logAction(req.auth.userId, 'admin', ACTIONS.SUPPRESSION_ADHERENT, { userId: user._id, nom: user.nom, prenom: user.prenom, email: user.email });
     res.status(200).json({ message: 'Adhérent supprimé.' });
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -43,7 +44,7 @@ exports.updateUser = async (req, res) => {
       { new: true, runValidators: true }
     ).select('-password');
     if (!user) return res.status(404).json({ message: 'Adhérent introuvable.' });
-    logAction(req.auth.userId, 'admin', 'MODIFICATION_ADHERENT', { userId: user._id, modifications: updates });
+    logAction(req.auth.userId, 'admin', ACTIONS.MODIFICATION_ADHERENT, { userId: user._id, modifications: updates });
     res.status(200).json(user);
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -55,7 +56,7 @@ exports.sendCredentials = async (req, res) => {
   try {
     const { email, prenom, nom, password } = req.body;
     await sendCredentialsEmail({ email, prenom, nom, password });
-    logAction(req.auth.userId, 'admin', 'ENVOI_IDENTIFIANTS', { email, nom, prenom });
+    logAction(req.auth.userId, 'admin', ACTIONS.ENVOI_IDENTIFIANTS, { email, nom, prenom });
     res.status(200).json({ message: 'Email envoyé.' });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Erreur lors de l\'envoi de l\'email.' });
@@ -99,7 +100,7 @@ exports.saveConfig = async (req, res) => {
     } else {
       config = await OpeningConfig.create({ joursSemaine, heureOuverture, heureFermeture, dureeCreneaux, joursExceptionnellementFermes, lignesOuvertes: lignesOuvertes ?? [1, 2], updatedBy: req.auth.userId });
     }
-    logAction(req.auth.userId, 'admin', 'MODIFICATION_CONFIG', { heureOuverture, heureFermeture, joursSemaine, dureeCreneaux, lignesOuvertes });
+    logAction(req.auth.userId, 'admin', ACTIONS.MODIFICATION_CONFIG, { heureOuverture, heureFermeture, joursSemaine, dureeCreneaux, lignesOuvertes });
     res.status(200).json(config);
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -133,7 +134,7 @@ exports.getAllReservations = async (req, res) => {
 // Pour un blocage, userId n'est pas requis dans le body : on utilise le compte admin
 exports.createReservation = async (req, res) => {
   try {
-    const { userId, date, heure, ligne, type } = req.body;
+    const { userId, date, heure, ligne, type, clientNom } = req.body;
     const isBlocage = type === 'blocage';
     if (!isBlocage && !userId) {
       return res.status(400).json({ message: 'Le champ userId est requis pour une réservation.' });
@@ -144,10 +145,11 @@ exports.createReservation = async (req, res) => {
       date,
       heure,
       ligne,
-      type: type || 'reservation'
+      type: type || 'reservation',
+      clientNom: isBlocage ? (clientNom || '').trim() : ''
     });
     await reservation.save();
-    logAction(req.auth.userId, 'admin', isBlocage ? 'CREATION_BLOCAGE' : 'CREATION_RESERVATION_ADMIN', { date, heure, ligne, type: type || 'reservation', userId: targetUserId });
+    logAction(req.auth.userId, 'admin', isBlocage ? ACTIONS.CREATION_BLOCAGE : ACTIONS.CREATION_RESERVATION_ADMIN, { date, heure, ligne, type: type || 'reservation', userId: targetUserId, clientNom: reservation.clientNom });
     res.status(201).json(reservation);
   } catch (error) {
     if (error.code === 11000) {
@@ -180,7 +182,7 @@ exports.deleteReservation = async (req, res) => {
   try {
     const reservation = await Reservation.findByIdAndDelete(req.params.id);
     if (!reservation) return res.status(404).json({ message: 'Réservation introuvable.' });
-    logAction(req.auth.userId, 'admin', 'SUPPRESSION_RESERVATION', { date: reservation.date, heure: reservation.heure, ligne: reservation.ligne, type: reservation.type, userId: reservation.userId });
+    logAction(req.auth.userId, 'admin', ACTIONS.SUPPRESSION_RESERVATION, { date: reservation.date, heure: reservation.heure, ligne: reservation.ligne, type: reservation.type, userId: reservation.userId });
     res.status(200).json({ message: 'Réservation supprimée.' });
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur.' });

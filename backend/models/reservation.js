@@ -6,7 +6,9 @@ const reservationSchema = mongoose.Schema({
   heure: { type: String, required: true },
   ligne: { type: Number, enum: [1, 2], required: true },
   // 'reservation' = créée par un user, 'blocage' = créée par un admin pour bloquer le créneau
-  type: { type: String, enum: ['reservation', 'blocage'], default: 'reservation' }
+  type: { type: String, enum: ['reservation', 'blocage'], default: 'reservation' },
+  // Nom libre du client (utilisé uniquement pour les blocages saisis par l'admin)
+  clientNom: { type: String, trim: true, default: '' }
 }, { timestamps: true });
 
 // Empêche la double réservation sur le même créneau (s'applique aussi aux blocages)

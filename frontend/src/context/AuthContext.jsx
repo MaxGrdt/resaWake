@@ -36,6 +36,7 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    sessionStorage.removeItem('welcomeSeen');
     setAuth(null);
   }
 

@@ -72,7 +72,8 @@ router.post('/reservations',
     body('date').isISO8601().withMessage('Date invalide (format attendu : YYYY-MM-DD).'),
     body('heure').matches(/^\d{2}:\d{2}$/).withMessage('Heure invalide (format attendu : HH:MM).'),
     body('ligne').toInt().isInt({ min: 1, max: 2 }).withMessage('La ligne doit être 1 ou 2.'),
-    body('type').optional().isIn(['reservation', 'blocage']).withMessage('Type invalide.')
+    body('type').optional().isIn(['reservation', 'blocage']).withMessage('Type invalide.'),
+    body('clientNom').optional().isString().isLength({ max: 100 }).withMessage('Nom client invalide.')
   ],
   validate,
   adminCtrl.createReservation
